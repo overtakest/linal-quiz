@@ -1,0 +1,27 @@
+name = "linal-quiz-bot"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# адрес Mini App на GitHub Pages (со слэшем в конце)
+WEBAPP_URL = "https://overtakest.github.io/linal-quiz/"
+# Telegram ID админов через запятую: всегда имеют доступ, получают заявки, управляют вайтлистом
+ADMIN_IDS = "5185408627"
+# модель для проверки теории
+CLAUDE_MODEL = "claude-opus-5"
+# сколько проверок в день на одного пользователя из вайтлиста (0 — без лимита; админам не действует)
+DAILY_LIMIT = "20"
+# "1" — разрешить запросы без Telegram (только для локальной отладки с localhost)
+DEV_ALLOW_NO_INITDATA = ""
+
+# Секреты задаются командами (в файл НЕ писать):
+#   npx wrangler secret put BOT_TOKEN
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put WEBHOOK_SECRET      (необязательно)
+
+# KV: вайтлист, заявки на доступ, дневные лимиты.
+# Создать: npx wrangler kv namespace create DB  → подставить выданный id
+[[kv_namespaces]]
+binding = "DB"
+id = "56d3d79b035d4f899b4b7f00b81f9346"

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#eaeef6">
+<title>АиГ Тесты</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&display=swap" rel="stylesheet">
+<script>
+  /* Загружаем сохранённый дизайн синхронно — без мигания при старте */
+  (function(){
+    var allowed={clinic:1,mono:1,focus:1};
+    var d; try{ d=localStorage.getItem('laq_design'); }catch(e){}
+    if(!allowed[d]) d='clinic';
+    document.write('<link id="skin" rel="stylesheet" href="assets/skins/'+d+'.css">');
+    document.write('<link rel="stylesheet" href="assets/study.css">');
+  })();
+</script>
+</head>
+<body data-theme="light">
+
+<div id="splash" class="splash">
+  <div class="splash-logo">
+    <div class="splash-ring"></div>
+    <span>АиГ</span>
+  </div>
+  <div class="splash-title">Линейная алгебра · подготовка к экзамену</div>
+  <div class="splash-sub" id="splashSub">Загрузка теории и вопросов…</div>
+</div>
+
+<div id="app" class="app hidden">
+
+  <!-- ===== HEADER ===== -->
+  <header class="topbar">
+    <div class="topbar-title" id="topbarTitle">Теория</div>
+    <button class="icon-btn" id="themeToggle" title="Тема" aria-label="Сменить тему">
+      <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><g class="rays"><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.9" y1="4.9" x2="6.6" y2="6.6"/><line x1="17.4" y1="17.4" x2="19.1" y2="19.1"/><line x1="4.9" y1="19.1" x2="6.6" y2="17.4"/><line x1="17.4" y1="6.6" x2="19.1" y2="4.9"/></g></svg>
+      <svg class="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </header>
+
+  <!-- ===== VIEWS ===== -->
+  <main class="views">
+
+    <!-- ---- THEORY ---- -->
+    <section class="view" id="view-theory">
+      <div id="thList"></div>
+      <div id="thTicket" class="hidden"></div>
+    </section>
+
+    <!-- ---- PRACTICE (тесты + письменно) ---- -->
+    <section class="view hidden" id="view-all">
+      <div class="seg" id="prSeg">
+        <button class="seg-btn active" data-seg="tests">🧩 Тесты</button>
+        <button class="seg-btn" data-seg="write">✍️ Письменно</button>
+      </div>
+      <div id="prWrite" class="hidden"></div>
+      <div id="prTests">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <svg class="search-i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+          <input id="searchInput" class="search" type="text" placeholder="Поиск по вопросам…" autocomplete="off">
+          <button id="searchClear" class="search-clear hidden">✕</button>
+        </div>
+        <button class="chip-btn" id="filterBtn">
+          <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+          <span id="filterLabel">Фильтр</span>
+        </button>
+      </div>
+
+      <div class="filter-sheet hidden" id="filterSheet">
+        <div class="filter-group">
+          <div class="filter-title">Билет</div>
+          <select class="match-sel" id="topicSel" style="width:100%"><option value="all">Все билеты</option></select>
+        </div>
+        <div class="filter-group">
+          <div class="filter-title">Тип вопроса</div>
+          <div class="filter-chips" id="typeChips"></div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-title">Статус</div>
+          <div class="filter-chips" id="statusChips">
+            <button class="fchip active" data-status="all">Все</button>
+            <button class="fchip" data-status="new">Не выучено</button>
+            <button class="fchip" data-status="learned">Выучено ✓</button>
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button class="btn ghost" id="shuffleBtn">🔀 Перемешать заново</button>
+          <button class="btn primary" id="applyFilter">Показать</button>
+        </div>
+      </div>
+
+      <div class="deck-meta">
+        <span id="deckCounter">1 / …</span>
+        <div class="deck-progress"><div id="deckProgressBar" class="deck-progress-bar"></div></div>
+      </div>
+
+      <div id="cardHost" class="card-host"></div>
+
+      <div class="deck-nav">
+        <button class="nav-btn" id="prevBtn"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <button class="btn learn-btn" id="learnBtn">Отметить выученным</button>
+        <button class="nav-btn" id="nextBtn"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+      </div>
+      </div>
+    </section>
+
+    <!-- ---- EXAM ---- -->
+    <section class="view hidden" id="view-exam">
+      <div id="examIntro" class="exam-intro">
+        <div id="tixIntro"></div>
+        <details class="mock-test">
+          <summary>🧩 Пробный тест по всей базе · 40 вопросов · 25 минут</summary>
+          <ul class="exam-rules">
+            <li><b>40</b> вопросов из всех билетов, вперемешку</li>
+            <li>Таймер <b>25:00</b> — по истечении вариант сдаётся автоматически</li>
+            <li>Ответы и подсказки видны <b>после завершения</b></li>
+          </ul>
+          <button class="btn ghost big" id="startExamBtn">Начать пробный тест</button>
+          <div id="examHistoryHost" class="exam-history"></div>
+        </details>
+      </div>
+      <div id="tixRun" class="hidden"></div>
+
+      <div id="examRun" class="exam-run hidden">
+        <div class="exam-topbar">
+          <div class="exam-timer" id="examTimer">25:00</div>
+          <div class="exam-count" id="examCount">1 / 40</div>
+          <button class="btn danger small" id="finishExamBtn">Завершить</button>
+        </div>
+        <div class="exam-progress"><div id="examProgressBar" class="exam-progress-bar"></div></div>
+        <div id="examCardHost" class="card-host"></div>
+        <div class="deck-nav">
+          <button class="nav-btn" id="examPrev"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <div class="exam-dots" id="examDots"></div>
+          <button class="nav-btn" id="examNext"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+
+      <div id="examResult" class="exam-result hidden"></div>
+    </section>
+
+    <!-- ---- PROFILE ---- -->
+    <section class="view hidden" id="view-profile">
+      <div class="profile-card">
+        <div class="profile-avatar" id="profAvatar">?</div>
+        <div class="profile-name" id="profName">Пользователь</div>
+        <div class="profile-username" id="profUser">Telegram</div>
+        <span class="admin-badge hidden" id="adminBadge">ADMIN</span>
+      </div>
+
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 120 120">
+          <circle class="ring-bg" cx="60" cy="60" r="52"/>
+          <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-pct" id="ringPct">0%</div>
+          <div class="ring-lbl">выучено</div>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-num" id="stLearned">0</div><div class="stat-lbl">Выучено</div></div>
+        <div class="stat"><div class="stat-num" id="stLeft">0</div><div class="stat-lbl">Осталось</div></div>
+        <div class="stat"><div class="stat-num" id="stTotal">0</div><div class="stat-lbl">Всего</div></div>
+        <div class="stat"><div class="stat-num" id="stExams">0</div><div class="stat-lbl">Экзаменов</div></div>
+        <div class="stat"><div class="stat-num" id="stBest">—</div><div class="stat-lbl">Лучший балл</div></div>
+        <div class="stat"><div class="stat-num" id="stAcc">—</div><div class="stat-lbl">Точность</div></div>
+      </div>
+
+      <div id="studyStats"></div>
+
+      <div class="design-picker">
+        <div class="dp-title">🎨 Дизайн оформления</div>
+        <div class="dp-grid" id="designGrid">
+          <button class="dp-card" data-design="clinic">
+            <span class="dp-swatch"><i style="background:#1f9d6b"></i><i style="background:#38b98a"></i><i style="background:#e8f0eb"></i></span>
+            <span class="dp-name">Клиника</span><span class="dp-desc">мята</span>
+          </button>
+          <button class="dp-card" data-design="mono">
+            <span class="dp-swatch"><i style="background:#1c1a15"></i><i style="background:#a9763f"></i><i style="background:#efece5"></i></span>
+            <span class="dp-name">Моно</span><span class="dp-desc">бумага · засечки</span>
+          </button>
+          <button class="dp-card" data-design="focus">
+            <span class="dp-swatch"><i style="background:#0d8f9c"></i><i style="background:#c9821f"></i><i style="background:#eaf1f1"></i></span>
+            <span class="dp-name">Фокус</span><span class="dp-desc">тил · янтарь</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="profile-actions">
+        <button class="btn ghost" id="adminOpenBtn" style="display:none">🛠 Админ-панель</button>
+        <button class="btn ghost" id="themeBtn2">🌗 Сменить тему</button>
+        <button class="btn danger-ghost" id="resetBtn">Сбросить прогресс</button>
+      </div>
+      <div class="app-foot">АиГ · линейная алгебра · <span id="footCount">…</span> · <span id="verTag">v1.0</span></div>
+    </section>
+
+  </main>
+
+  <!-- ===== BOTTOM NAV ===== -->
+  <nav class="tabbar">
+    <button class="tab active" data-view="theory">
+      <svg viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5c-.8 0-1.5-.7-1.5-1.5z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H13v16h5.5c.8 0 1.5-.7 1.5-1.5z"/></svg>
+      <span>Теория</span>
+    </button>
+    <button class="tab" data-view="all">
+      <svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>
+      <span>Отработка</span>
+    </button>
+    <button class="tab" data-view="exam">
+      <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 8-4v6"/><path d="M6 11v5c0 1 2.7 3 6 3s6-2 6-3v-5"/></svg>
+      <span>Экзамен</span>
+    </button>
+    <button class="tab" data-view="profile">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span>Профиль</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ===== ADMIN MODAL ===== -->
+<div id="adminModal" class="modal hidden">
+  <div class="modal-panel admin-panel">
+    <div class="modal-head">
+      <h3>🛠 Админ-панель</h3>
+      <button class="icon-btn" id="adminClose">✕</button>
+    </div>
+    <div class="admin-tabs">
+      <button class="atab active" data-atab="dash">Обзор</button>
+      <button class="atab" data-atab="manage">Вопросы</button>
+      <button class="atab" data-atab="data">Данные</button>
+    </div>
+    <div class="admin-body" id="adminBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="assets/config.js"></script>
+<script src="assets/study.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

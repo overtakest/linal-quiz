@@ -1,0 +1,71 @@
+# 🤖 Бот + проверка теории на Cloudflare Workers
+
+Воркер из этой папки делает сразу две вещи:
+1. **Telegram-бот** (вебхук): приветствие, кнопки открытия разделов, карточка прогресса.
+2. **API проверки теории** `POST /api/grade`: мини-приложение отправляет фото листков
+   (или набранный текст) и номера билетов. Воркер берёт эталон из `data/theory.json`, вызывает
+   **Claude API** и возвращает балл по каждому билету, отмеченные карточки, что упущено и где ошибки.
+
+Ключ Anthropic хранится только в зашифрованном секрете воркера и в приложение не попадает.
+Запросы принимаются только из Telegram: воркер проверяет подпись `initData`.
+
+## Что понадобится
+- аккаунт Cloudflare (бесплатный план подходит);
+- Node.js 18+;
+- токен бота из [@BotFather](https://t.me/BotFather);
+- API-ключ Anthropic: [console.anthropic.com](https://console.anthropic.com) → *API Keys* (оплата по
+  факту запросов). OAuth-вход подписки Claude для сторонних ботов использовать нельзя, нужен именно API-ключ.
+
+## Шаги
+
+```bash
+cd linal-quiz/bot
+npm install
+npx wrangler login
+```
+
+1. Открой `wrangler.toml` и впиши `WEBAPP_URL` — адрес приложения на GitHub Pages
+   (например `https://ТВОЙ_ЛОГИН.github.io/linal-quiz/`, со слэшем в конце).
+2. Задай секреты:
+   ```bash
+   npx wrangler secret put BOT_TOKEN
+   npx wrangler secret put ANTHROPIC_API_KEY
+   npx wrangler secret put WEBHOOK_SECRET
+   ```
+   Последний необязателен: любая случайная строка для защиты вебхука.
+3. Задеплой:
+   ```bash
+   npx wrangler deploy
+   ```
+   В выводе будет адрес вида `https://linal-quiz-bot.<поддомен>.workers.dev`.
+4. Открой в браузере `https://linal-quiz-bot.<поддомен>.workers.dev/setWebhook`. Это привяжет бота,
+   кнопку меню и команды. Ответ должен содержать `"ok":true`.
+5. В приложении, в файле `assets/config.js`, впиши `apiUrl: "https://linal-quiz-bot.<поддомен>.workers.dev"`
+   и перезалей сайт на GitHub Pages.
+6. Проверь: `https://…workers.dev/api/health` должен вернуть `{"ok":true,"ai":true}`.
+
+## Настройки (`wrangler.toml` → `[vars]`)
+| Переменная | Что делает |
+|---|---|
+| `CLAUDE_MODEL` | модель проверки, по умолчанию `claude-opus-5` |
+| `ALLOWED_USER_IDS` | Telegram ID через запятую, кому разрешена проверка ИИ; пусто — всем |
+| `DAILY_LIMIT` | лимит проверок в день на пользователя; работает, если подключён KV `LIMITS` (см. комментарий в `wrangler.toml`) |
+| `DEV_ALLOW_NO_INITDATA` | `1` — разрешить запросы без Telegram, только для локальной отладки |
+
+💸 **Про расходы.** Каждая проверка — один запрос к Claude с фото и эталоном билета. Чтобы
+посторонние не тратили твой ключ, ограничь доступ через `ALLOWED_USER_IDS` и/или включи `DAILY_LIMIT`.
+Лимит расходов можно также выставить в консоли Anthropic.
+
+Модель запрашивается с `fallbacks: "default"`: если основная модель откажется обрабатывать запрос
+по политике безопасности, API сам повторит его на рекомендованной резервной модели.
+
+## Локальная отладка
+```bash
+cp .dev.vars.example .dev.vars   # впиши ключи
+npx wrangler dev --port 8787
+```
+В `assets/config.js` временно укажи `apiUrl: "http://localhost:8787"` и открой приложение с localhost.
+
+## 🔒 Про токены
+Токен бота и ключ Anthropic храни только в секретах воркера или в `bot/.dev.vars`
+(файл в `.gitignore`). Никогда не коммить их в репозиторий.

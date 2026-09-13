@@ -1,0 +1,4 @@
+BOT_TOKEN=123456:замени_на_токен
+ANTHROPIC_API_KEY=sk-ant-...
+WEBAPP_URL=http://localhost:8778/
+DEV_ALLOW_NO_INITDATA=1
