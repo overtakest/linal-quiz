@@ -175,3 +175,23 @@
          font:inherit;font-size:13px;color:var(--text);cursor:pointer}
 .en-chip:active{transform:scale(.97)}
 .en-extra-ans:not(:empty){margin-top:10px}
+
+/* ---- админ: участники ---- */
+.usr{background:var(--surface-2);border-radius:14px;padding:12px;margin-bottom:9px;cursor:pointer}
+.usr-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.usr-name{font-weight:800;font-size:14.5px}
+.usr-nick{font-weight:600;color:var(--muted);font-size:13px}
+.usr-grade{font-weight:800;font-size:16px;width:28px;height:28px;border-radius:9px;display:grid;place-items:center}
+.usr-grade.good{background:var(--success-soft);color:var(--success)}
+.usr-grade.mid{background:color-mix(in srgb,var(--warn,#d69a2d) 18%,transparent);color:var(--warn,#b27818)}
+.usr-grade.bad{background:var(--danger-soft);color:var(--danger)}
+.usr-bars{display:flex;flex-direction:column;gap:5px;margin:8px 0 6px}
+.usr-bar span{font-size:12px;color:var(--muted)}
+.usr-bar i{display:block;height:6px;border-radius:4px;background:var(--surface);overflow:hidden;margin-top:3px}
+.usr-bar b{display:block;height:100%;background:var(--grad);border-radius:4px}
+.usr-meta{font-size:11.5px;color:var(--faint)}
+.usr-more{margin-top:10px;padding-top:9px;border-top:1px dashed var(--border);font-size:13px;line-height:1.6}
+.usr-exams{margin-top:6px;display:flex;flex-direction:column;gap:4px}
+.usr-exams div{font-size:12.5px;color:var(--muted)}
+.usr-exams b{color:var(--text)}
+.usr-exams span{color:var(--faint)}

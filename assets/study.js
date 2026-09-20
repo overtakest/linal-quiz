@@ -206,7 +206,7 @@ function openTicket(n, cardId){
 function closeTicket(){ $('#thTicket').classList.add('hidden'); $('#thTicket').classList.remove('recall'); $('#thList').classList.remove('hidden'); renderTheoryList(); }
 function toggleDone(id){
   if(done.has(id)) done.delete(id); else done.add(id);
-  saveDone(); C.haptic(done.has(id)?'ok':undefined);
+  saveDone(); pushProgress(); C.haptic(done.has(id)?'ok':undefined);
   const el=document.getElementById('thc-'+id);
   const info=cardById[id];
   if(el && info){ el.outerHTML=cardHtml(info.card); }
@@ -318,7 +318,7 @@ async function onWritingClick(ev){
     b.disabled=false;
   }
 }
-function setBest(id, score){ wrBest[id]=Math.max(wrBest[id]||0, score); saveWr(); }
+function setBest(id, score){ wrBest[id]=Math.max(wrBest[id]||0, score); saveWr(); pushProgress(); }
 function refreshBest(box, id){ const p=$('.wr-prompt', box); let s=$('.wr-best', p); if(!s){ s=document.createElement('span'); s.className='wr-best'; p.appendChild(s); } s.textContent=`лучший ${wrBest[id]}%`; }
 function scoreClass(s){ return s>=85?'s-hi':s>=60?'s-mid':'s-lo'; }
 function resultHtml(t){
@@ -635,7 +635,7 @@ function finishTests(auto){
   tixHist.unshift({ ts:run.ts, t:run.tickets, th:theoryPct, te:testsPct, f:finalPct, g:grade, src:detail.src });
   tixHist.slice(10).forEach(h=>LS.del('tixd'+h.ts));
   tixHist=tixHist.slice(0,10); saveHist();
-  run=null; runPhotos=[]; saveRun();
+  run=null; runPhotos=[]; saveRun(); pushProgress(true);
   renderTixResult(detail); C.haptic(grade>=3?'ok':'err');
 }
 
@@ -848,6 +848,88 @@ function refreshAccessUi(){
 }
 
 /* =====================================================================
+   ПРОГРЕСС НА СЕРВЕР (чтобы админ видел участников)
+   ===================================================================== */
+let lastSent = 0, sendT = null;
+function snapshot(){
+  const cardsTotal = Object.keys(cardById).length;
+  const ws = Object.values(wrBest);
+  return {
+    cardsDone: [...done].filter(id=>cardById[id]).length, cardsTotal,
+    learned: C.App.questions.reduce((n,q)=>n+(isLearnedQ(q)?1:0),0), total: C.App.questions.length,
+    acc: C.App.stats.answered ? Math.round(C.App.stats.correct/C.App.stats.answered*100) : null,
+    wrAvg: ws.length ? Math.round(ws.reduce((a,b)=>a+b,0)/ws.length) : null,
+    wrCount: ws.length,
+    exams: tixHist.slice(0,10).map(h=>({ ts:h.ts, g:h.g, th:h.th, te:h.te, t:h.t })),
+  };
+}
+function isLearnedQ(q){ const m=/^q(\d+)$/.exec(q.id); return m ? C.App.learnedBase.has(+m[1]) : C.App.learnedCustom.has(q.id); }
+function pushProgress(force){
+  if(!apiOn() || !(C.TG && C.TG.initData)) return;          // только из Telegram
+  clearTimeout(sendT);
+  const go = () => {
+    lastSent = Date.now();
+    apiPost('/api/progress', { snapshot: snapshot() }).catch(()=>{});
+  };
+  if(force || Date.now()-lastSent > 120000) go();
+  else sendT = setTimeout(go, 15000);
+}
+
+/* ---- админ: список участников ---- */
+function fmtAgo(ts){
+  const d=Math.floor((Date.now()-(ts||0))/86400000);
+  if(d<=0){ const h=Math.floor((Date.now()-(ts||0))/3600000); return h<1?'только что':h+' ч назад'; }
+  return d===1?'вчера':d+' дн. назад';
+}
+async function renderAdminUsers(host){
+  host.innerHTML='<div class="data-note">Загружаю участников…</div>';
+  if(!apiOn()){ host.innerHTML='<div class="data-note">Не задан apiUrl в assets/config.js — сервер не подключён.</div>'; return; }
+  let data;
+  try{ data=await apiPost('/api/admin/users'); }
+  catch(err){ host.innerHTML=`<div class="wr-err">⚠️ ${e(err.message)}</div>`; return; }
+  const us=data.users||[];
+  if(!us.length){ host.innerHTML='<div class="data-note">Пока никто не открывал приложение через бота.</div>'; return; }
+  const avg = k => Math.round(us.reduce((a,u)=>a+(u[k]||0),0)/us.length);
+  host.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:14px">
+      <div class="stat"><div class="stat-num">${us.length}</div><div class="stat-lbl">Участников</div></div>
+      <div class="stat"><div class="stat-num">${avg('th')}%</div><div class="stat-lbl">Теория, ср.</div></div>
+      <div class="stat"><div class="stat-num">${us.reduce((a,u)=>a+(u.e||0),0)}</div><div class="stat-lbl">Экзаменов</div></div>
+    </div>
+    <div class="usr-list">${us.map(u=>`
+      <div class="usr" data-id="${e(u.id)}">
+        <div class="usr-top">
+          <div class="usr-name">${e(u.n||'без имени')}${u.u?` <span class="usr-nick">@${e(u.u)}</span>`:''}</div>
+          ${u.g?`<span class="usr-grade ${u.g>=4?'good':u.g>=3?'mid':'bad'}">${u.g}</span>`:''}
+        </div>
+        <div class="usr-bars">
+          <div class="usr-bar"><span>📖 теория ${u.th||0}%</span><i><b style="width:${u.th||0}%"></b></i></div>
+          <div class="usr-bar"><span>🧩 тесты ${u.q||0}%</span><i><b style="width:${u.q||0}%"></b></i></div>
+        </div>
+        <div class="usr-meta">ID ${e(u.id)} · экзаменов: ${u.e||0}${u.best?` · лучшая оценка ${u.best}`:''} · ${fmtAgo(u.ts)}</div>
+        <div class="usr-detail"></div>
+      </div>`).join('')}</div>
+    <div class="data-note" style="margin-top:12px">Нажми на участника — история его экзаменов. То же в боте: /users</div>`;
+  host.onclick = async ev => {
+    const row=ev.target.closest('.usr'); if(!row) return;
+    const box=$('.usr-detail', row);
+    if(box.innerHTML){ box.innerHTML=''; return; }
+    box.innerHTML='<div class="data-note">Загружаю…</div>';
+    try{
+      const d=await apiPost('/api/admin/users', { id: row.dataset.id });
+      const p=d.detail;
+      if(!p){ box.innerHTML='<div class="data-note">Нет данных</div>'; return; }
+      box.innerHTML = `<div class="usr-more">
+        <div>📖 теория: ${p.cardsDone} из ${p.cardsTotal} карточек</div>
+        <div>🧩 тесты: ${p.learned} из ${p.total}${p.acc!=null?` · точность ${p.acc}%`:''}</div>
+        <div>✍️ письменно: ${p.wrCount} ответов${p.wrAvg!=null?` · средний ${p.wrAvg}%`:''}</div>
+        ${(p.exams||[]).length?`<div class="usr-exams">${p.exams.map(x=>`<div>Билеты ${x.t.join(', ')} · теория ${x.th}% · тесты ${x.te}% → <b>${x.g}</b> <span>${fmtAgo(x.ts)}</span></div>`).join('')}</div>`:'<div>Экзаменов пока нет</div>'}
+      </div>`;
+    }catch(err){ box.innerHTML=`<div class="wr-err">${e(err.message)}</div>`; }
+  };
+}
+
+/* =====================================================================
    PUBLIC
    ===================================================================== */
 const Study = window.Study = {
@@ -872,6 +954,7 @@ const Study = window.Study = {
       const t=ev.target.closest('[data-theory-open]'); if(t){ C.switchView('theory'); openTicket(+t.dataset.theoryOpen); }
     });
     renderEntryList();
+    pushProgress(true);
     $('#tixRun').addEventListener('click', ev => { const tl=ev.target.closest('[data-theory-link]'); if(tl && run){ C.switchView('theory'); openTicket(+tl.dataset.theoryLink); } });
     document.addEventListener('quiz:view', ev => {
       const v=ev.detail;
@@ -891,6 +974,8 @@ const Study = window.Study = {
     return { cardsDone:d, cardsTotal:+(LS.get('cardsTotal')||0), tix:h.length, lastGrade:h[0]?h[0].g:null };
   },
   writingActive(){ return seg==='write'; },
+  renderAdminUsers,
+  isAdmin(){ return !!(access && access.admin); },
   openTicket(n){ C.switchView('theory'); openTicket(n); },
 };
 })();

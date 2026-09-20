@@ -6,14 +6,17 @@
      POST /                    — вебхук Telegram
      POST /api/grade           — проверка письменной теории (фото и/или текст) через Claude API
      POST /api/access          — статус доступа текущего пользователя к проверке ИИ
+     POST /api/progress        — приложение присылает сводку прогресса пользователя
+     POST /api/admin/users     — список участников с прогрессом (только для ADMIN_IDS)
      POST /api/request-access  — запросить доступ (админу приходит сообщение с кнопками)
      GET  /api/health          — проверка, что API настроен
 
    Секреты (npx wrangler secret put …):  BOT_TOKEN, ANTHROPIC_API_KEY, WEBHOOK_SECRET (необяз.)
    Переменные (wrangler.toml [vars]):     WEBAPP_URL, ADMIN_IDS, CLAUDE_MODEL, DAILY_LIMIT, DEV_ALLOW_NO_INITDATA
-   KV:                                    DB — вайтлист (wl:<id>), заявки (req:<id>), лимиты (lim:<id>:<дата>)
+   KV:                                    DB — вайтлист (wl:<id>), заявки (req:<id>), лимиты (lim:<id>:<дата>),
+                                          прогресс участников (pr:<id>)
 
-   Команды админа в боте: /whitelist, /allow <id>, /revoke <id>
+   Команды админа в боте: /whitelist, /allow <id>, /revoke <id>, /users
    ===================================================================== */
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -87,6 +90,48 @@ async function requestAccess(env, user) {
 }
 
 /* =====================================================================
+   ПРОГРЕСС УЧАСТНИКОВ
+   ===================================================================== */
+const clampInt = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+function cleanSnapshot(raw, user) {
+  const s = raw && typeof raw === 'object' ? raw : {};
+  const exams = (Array.isArray(s.exams) ? s.exams : []).slice(0, 10).map(x => ({
+    ts: clampInt(x.ts, 4e12), g: clampInt(x.g, 5), th: clampInt(x.th, 100), te: clampInt(x.te, 100),
+    t: (Array.isArray(x.t) ? x.t : []).slice(0, 3).map(n => clampInt(n, 56)),
+  }));
+  return {
+    name: String([user.first_name, user.last_name].filter(Boolean).join(' ') || '').slice(0, 64),
+    username: String(user.username || '').slice(0, 32),
+    cardsDone: clampInt(s.cardsDone, 9999), cardsTotal: clampInt(s.cardsTotal, 9999),
+    learned: clampInt(s.learned, 9999), total: clampInt(s.total, 9999),
+    acc: s.acc == null ? null : clampInt(s.acc, 100),
+    wrAvg: s.wrAvg == null ? null : clampInt(s.wrAvg, 100),
+    wrCount: clampInt(s.wrCount, 9999),
+    exams, ts: Date.now(),
+  };
+}
+const pctOf = (a, b) => b ? Math.round(a / b * 100) : 0;
+async function saveProgress(env, user, raw) {
+  if (!env.DB) return { ok: false };
+  const snap = cleanSnapshot(raw, user);
+  const best = snap.exams.length ? Math.max(...snap.exams.map(e => e.g)) : null;
+  await env.DB.put('pr:' + user.id, JSON.stringify(snap), {
+    metadata: {
+      n: snap.name, u: snap.username, th: pctOf(snap.cardsDone, snap.cardsTotal),
+      q: pctOf(snap.learned, snap.total), e: snap.exams.length,
+      g: snap.exams.length ? snap.exams[0].g : null, best, ts: snap.ts,
+    },
+  });
+  return { ok: true };
+}
+async function listProgress(env) {
+  if (!env.DB) return [];
+  const { keys } = await env.DB.list({ prefix: 'pr:', limit: 500 });
+  return keys.map(k => ({ id: k.name.slice(3), ...(k.metadata || {}) }))
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+}
+
+/* =====================================================================
    TELEGRAM BOT
    ===================================================================== */
 async function setWebhook(tg, env, url, base) {
@@ -107,6 +152,7 @@ async function setWebhook(tg, env, url, base) {
     await tg('setMyCommands', { scope: { type: 'chat', chat_id: Number(admin) }, commands: [
       { command: 'start', description: 'Открыть тренажёр' },
       { command: 'whitelist', description: 'Кому выдан доступ' },
+      { command: 'users', description: 'Прогресс участников' },
       { command: 'allow', description: '/allow <id> — выдать доступ' },
       { command: 'revoke', description: '/revoke <id> — забрать доступ' },
       { command: 'exam', description: 'Экзамен' },
@@ -228,6 +274,21 @@ async function handleUpdate(update, tg, env, base) {
     await tg('sendMessage', { chat_id: chat, text: body, parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } });
     return;
   }
+  if (admin && name === 'users') {
+    const list = await listProgress(env);
+    if (!list.length) { await tg('sendMessage', { chat_id: chat, text: 'Пока никто не открывал приложение (или KV DB не подключён).' }); return; }
+    const bar = pct => { const n = Math.round(pct / 10); return '▰'.repeat(n) + '▱'.repeat(10 - n); };
+    const days = ts => { const d = Math.floor((Date.now() - (ts || 0)) / 86400000); return d <= 0 ? 'сегодня' : d === 1 ? 'вчера' : d + ' дн. назад'; };
+    let body = `👥 <b>Участники</b> (${list.length})`;
+    for (const u of list.slice(0, 30)) {
+      body += `\n\n<b>${esc(u.n || 'без имени')}</b>${u.u ? ' @' + esc(u.u) : ''} · <code>${u.id}</code>`
+        + `\n📖 ${bar(u.th || 0)} ${u.th || 0}%  🧩 ${u.q || 0}%`
+        + `\n🎓 экзаменов: ${u.e || 0}${u.g ? ` · последняя: ${u.g}` : ''}${u.best ? ` · лучшая: ${u.best}` : ''} · ${days(u.ts)}`;
+    }
+    if (list.length > 30) body += `\n\n…и ещё ${list.length - 30}`;
+    await tg('sendMessage', { chat_id: chat, text: body, parse_mode: 'HTML' });
+    return;
+  }
   if (admin && (name === 'allow' || name === 'revoke')) {
     const id = (arg.match(/\d{3,}/) || [])[0];
     if (!id || !env.DB) { await tg('sendMessage', { chat_id: chat, text: `Использование: /${name} 123456789` }); return; }
@@ -289,7 +350,8 @@ async function handleApi(request, env, url, base) {
   const cors = corsHeaders(request, env, base);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (url.pathname === '/api/health') return json({ ok: true, ai: !!env.ANTHROPIC_API_KEY, whitelist: !!env.DB }, 200, cors);
-  if (request.method !== 'POST' || !['/api/grade', '/api/access', '/api/request-access'].includes(url.pathname)) return json({ error: 'not found' }, 404, cors);
+  const ROUTES = ['/api/grade', '/api/access', '/api/request-access', '/api/progress', '/api/admin/users'];
+  if (request.method !== 'POST' || !ROUTES.includes(url.pathname)) return json({ error: 'not found' }, 404, cors);
 
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'Некорректный запрос' }, 400, cors); }
 
@@ -305,6 +367,19 @@ async function handleApi(request, env, url, base) {
     const allowed = await isAllowed(env, uid);
     const pending = !allowed && env.DB ? !!(await env.DB.get('req:' + uid)) : false;
     return json({ ai: !!env.ANTHROPIC_API_KEY, allowed, admin: isAdmin(env, uid), pending, id: uid }, 200, cors);
+  }
+  if (url.pathname === '/api/progress') {
+    const r = await saveProgress(env, user, body.snapshot);
+    return json(r, 200, cors);
+  }
+  if (url.pathname === '/api/admin/users') {
+    if (!isAdmin(env, uid)) return json({ error: 'Только для админа' }, 403, cors);
+    const users = await listProgress(env);
+    if (body.id) {
+      const raw = env.DB ? await env.DB.get('pr:' + String(body.id).replace(/\D/g, '')) : null;
+      return json({ users, detail: raw ? JSON.parse(raw) : null }, 200, cors);
+    }
+    return json({ users }, 200, cors);
   }
   if (url.pathname === '/api/request-access') {
     const r = await requestAccess(env, user);

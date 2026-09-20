@@ -721,6 +721,8 @@ function renderAdmin(){
   if(curAtab==='dash') return renderAdminDash(host);
   if(curAtab==='manage') return renderAdminManage(host);
   if(curAtab==='data') return renderAdminData(host);
+  if(curAtab==='users'){ host.onclick=null; if(window.Study && Study.renderAdminUsers) return Study.renderAdminUsers(host);
+    host.innerHTML='<div class="data-note">Модуль не загружен</div>'; return; }
 }
 function renderAdminDash(host){
   const total=App.questions.length, learned=learnedCount();
