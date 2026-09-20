@@ -4,6 +4,7 @@
    ===================================================================== */
 (() => {
 'use strict';
+const DV = '?v=' + ((window.QUIZ_CONFIG && window.QUIZ_CONFIG.version) || '1');
 
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
@@ -935,11 +936,11 @@ async function renderAdminUsers(host){
 const Study = window.Study = {
   async init(core){
     C=core;
-    try{ T=await fetch('data/theory.json').then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); }); }catch(err){ T=[]; console.error('theory.json', err); }
+    try{ T=await fetch('data/theory.json'+DV).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); }); }catch(err){ T=[]; console.error('theory.json', err); }
     T.sort((a,b)=>a.n-b.n);
     T.forEach(t=>t.cards.forEach(c=>{ cardById[c.id]={card:c, ticket:t}; }));
-    try{ (await fetch('data/cheat.json').then(r=>r.json())).forEach(c=>{ cheat[c.n]=c.lines; }); }catch(err){ console.error('cheat.json', err); }
-    try{ entry=await fetch('data/entry.json').then(r=>r.json()); }catch(err){ console.error('entry.json', err); }
+    try{ (await fetch('data/cheat.json'+DV).then(r=>r.json())).forEach(c=>{ cheat[c.n]=c.lines; }); }catch(err){ console.error('cheat.json', err); }
+    try{ entry=await fetch('data/entry.json'+DV).then(r=>r.json()); }catch(err){ console.error('entry.json', err); }
     indexEntry();
     LS.set('cardsTotal', String(Object.keys(cardById).length));
     await loadStudyProgress();

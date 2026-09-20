@@ -4,6 +4,7 @@
    ===================================================================== */
 (() => {
 'use strict';
+const DV = '?v=' + ((window.QUIZ_CONFIG && window.QUIZ_CONFIG.version) || '1');
 
 /* ---------- Telegram bridge ---------- */
 const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -117,8 +118,8 @@ function saveExams(){ Store.set('exams', JSON.stringify(App.examHistory.slice(0,
    ===================================================================== */
 async function loadData(){
   const [qs, tips] = await Promise.all([
-    fetch('data/questions.json').then(r=>r.json()),
-    fetch('data/tips.json').then(r=>r.json()).catch(()=>({}))
+    fetch('data/questions.json'+DV).then(r=>r.json()),
+    fetch('data/tips.json'+DV).then(r=>r.json()).catch(()=>({}))
   ]);
   App.tips = tips || {};
   _baseQs = qs;
@@ -175,7 +176,7 @@ function applyDesign(name, save=true){
   if(!DESIGN_IDS.includes(name)) name=DEFAULT_DESIGN;
   document.body.dataset.design=name;
   const link=document.getElementById('skin');
-  const href='assets/skins/'+name+'.css';
+  const href='assets/skins/'+name+'.css'+DV;
   if(link && !link.getAttribute('href').endsWith(href)){
     link.addEventListener('load', updateChromeColor, {once:true});
     link.setAttribute('href', href);
