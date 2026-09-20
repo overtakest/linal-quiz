@@ -24,6 +24,11 @@ let runPhotos = [];         // фото текущего экзамена (то�
 const wrPhotos = {};        // cardId → фото для отработки
 let clockT = null;
 let access = null;            // {allowed, pending, admin} — доступ к проверке ИИ (вайтлист)
+let cheat = {};             // n → строки короткой шпоры
+let entry = { variants:[], extra:[] };   // входной контроль
+const realByTicket = {};    // n → номера реальных вариантов
+const prepByTicket = {};    // n → номера вариантов из файла группы
+const realByCard = {};      // cardId → номера реальных вариантов
 
 const CHAPTERS = [
   { from:1,  to:11, name:'Линейные пространства' },
@@ -115,7 +120,7 @@ function renderTheoryRows(){
         <span class="th-num">${t.n}</span>
         <span class="th-row-main">
           <span class="th-row-title">${e(stripNum(t.title))}</span>
-          <span class="th-row-meta">${s.total} карт. · изучено ${s.done}${s.wr!=null?` · письменно ${s.wr}%`:''}</span>
+          <span class="th-row-meta">${s.total} карт. · изучено ${s.done}${s.wr!=null?` · письменно ${s.wr}%`:''}${realByTicket[t.n]?' · 🔥 входной контроль':''}</span>
           <span class="th-mini"><i style="width:${p}%"></i></span>
         </span>
         <span class="th-go">›</span></button>`;
@@ -136,6 +141,7 @@ function cardHtml(c, opts={}){
       <span class="th-kind ${KIND_CLASS[c.kind]||''}">${e(c.kind)}</span>
       <span class="th-card-title">${e(c.title)}</span>
       <span class="th-check">${isDone?'✓':''}</span>
+      ${realByCard[c.id]?`<span class="real-tag small">🔥 спрашивали на входном контроле · вар. ${uniq(realByCard[c.id]).join(', ')}</span>`:''}
     </div>
     <div class="th-body">
       <div class="th-text">${e(c.text)}</div>
@@ -163,6 +169,9 @@ function openTicket(n, cardId){
       <div><div class="th-ticket-title">${e(stripNum(t.title))}</div>
       <div class="th-sub">${s.total} карточек · изучено ${s.done}</div></div>
     </div>
+    ${realTicketTag(t.n)}
+    ${cheat[t.n]?`<details class="cheat-box"><summary>🖨 Короткая шпора по билету</summary>${cheatHtml(t.n)}
+      <a class="btn ghost small" href="print.html" target="_blank" rel="noopener">Распечатать все 56</a></details>`:''}
     <div class="th-actions">
       <button class="btn ghost small" data-act="recall">🙈 Проверить себя</button>
       <button class="btn ghost small" data-act="write">✍️ Письменно</button>
@@ -685,6 +694,121 @@ function renderStudyStats(){
 }
 
 /* =====================================================================
+   ВХОДНОЙ КОНТРОЛЬ
+   ===================================================================== */
+const vNum = v => String(v.title||'').replace(/\D+/g,'') || v.id;
+const uniq = a => [...new Set(a||[])];
+function indexEntry(){
+  (entry.variants||[]).forEach(v=>{
+    const dst = v.real ? realByTicket : prepByTicket;
+    (v.items||[]).forEach(it=>{
+      if(it.n) (dst[it.n]=dst[it.n]||[]).push(vNum(v));
+      if(v.real && it.cardId) (realByCard[it.cardId]=realByCard[it.cardId]||[]).push(vNum(v));
+    });
+  });
+}
+function realTicketTag(n){
+  if(!realByTicket[n]) return '';
+  return `<div class="real-tag">🔥 был на реальном входном контроле · вариант ${uniq(realByTicket[n]).join(', ')}</div>`;
+}
+function cheatHtml(n){
+  const lines=cheat[n]; if(!lines) return '';
+  return `<ul class="cheat-list">${lines.map(l=>`<li>${e(l)}</li>`).join('')}</ul>`;
+}
+
+let enReveal = false;   // показывать ответы сразу
+function renderEntryList(){
+  const host=$('#enList'); if(!host) return;
+  const vs=entry.variants||[];
+  if(!vs.length){ host.innerHTML='<div class="data-note">Входной контроль не загружен (data/entry.json).</div>'; return; }
+  const real=vs.filter(v=>v.real), prep=vs.filter(v=>!v.real);
+  const row = v => `<button class="th-row" data-v="${e(v.id)}">
+      <span class="th-num ${v.real?'hot':''}">${e(vNum(v))}</span>
+      <span class="th-row-main">
+        <span class="th-row-title">${e(v.title)}</span>
+        <span class="th-row-meta">${e((v.items||[]).map(i=>i.q).join(' · ').slice(0,80))}…</span>
+      </span><span class="th-go">›</span></button>`;
+  host.innerHTML = `
+    <div class="th-head">
+      <div class="th-head-top">
+        <div><div class="th-h1">Входной контроль</div>
+        <div class="th-sub">5 вопросов, короткие определения и формулировки — без доказательств</div></div>
+        <div class="th-pct">🔥</div>
+      </div>
+      <div class="th-meta">${real.length} реальных варианта · ${prep.length} для подготовки</div>
+    </div>
+    <div class="th-actions">
+      <button class="btn primary small" data-en="random">🎲 Случайный вариант</button>
+      <a class="btn ghost small" href="print.html" target="_blank" rel="noopener">🖨 Шпоры для печати</a>
+    </div>
+    ${real.length?`<div class="th-chapter">С реального контроля <span>🔥</span></div>${real.map(row).join('')}`:''}
+    ${prep.length?`<div class="th-chapter">Варианты для подготовки <span>из файла группы</span></div>${prep.map(row).join('')}`:''}
+    ${(entry.extra||[]).length?`<div class="th-chapter">Остальные возможные темы <span>${entry.extra.length}</span></div>
+      <div class="en-extra">${entry.extra.map((it,i)=>`<button class="en-chip" data-extra="${i}">${e(it.q)}</button>`).join('')}</div>
+      <div class="en-extra-ans" id="enExtraAns"></div>`:''}`;
+  host.onclick = ev => {
+    const r=ev.target.closest('[data-v]'); if(r){ openVariant(r.dataset.v); C.haptic(); return; }
+    if(ev.target.closest('[data-en="random"]')){
+      const v=(entry.variants||[])[Math.floor(Math.random()*entry.variants.length)];
+      enReveal=false; openVariant(v.id); C.haptic(); return;
+    }
+    const ex=ev.target.closest('[data-extra]');
+    if(ex){
+      const it=(entry.extra||[])[+ex.dataset.extra]; if(!it) return;
+      $('#enExtraAns').innerHTML=`<div class="en-a open"><b>${e(it.q)}</b><div class="th-text">${e(it.a)}</div>
+        ${it.n?`<button class="btn ghost small" data-theory-open="${it.n}">📖 Билет ${it.n}</button>`:''}</div>`;
+      C.haptic();
+    }
+  };
+}
+function openVariant(id){
+  const v=(entry.variants||[]).find(x=>x.id===id); if(!v) return;
+  const host=$('#enVariant');
+  host.innerHTML = `
+    <button class="th-back" data-en="back">‹ Все варианты</button>
+    <div class="th-ticket-head">
+      <span class="th-num big ${v.real?'hot':''}">${e(vNum(v))}</span>
+      <div><div class="th-ticket-title">${e(v.title)}</div>
+      <div class="th-sub">${v.real?'🔥 этот вариант был на реальном входном контроле':'вариант для подготовки (из файла группы)'}</div></div>
+    </div>
+    <div class="th-actions">
+      <button class="btn ghost small" data-en="toggle">${enReveal?'🙈 Скрыть ответы':'👁 Показать все ответы'}</button>
+    </div>
+    ${(v.items||[]).map((it,i)=>`<div class="en-item ${enReveal?'open':''}">
+      <div class="en-q"><span class="en-n">${i+1}</span>${e(it.q)}</div>
+      <button class="en-toggle">Показать ответ</button>
+      <div class="en-a">
+        <div class="th-text">${e(it.a)}</div>
+        ${it.n?`<div class="en-links"><button class="btn ghost small" data-theory-open="${it.n}">📖 Билет ${it.n}</button>
+          ${cheat[it.n]?`<button class="btn ghost small" data-cheat="${it.n}">🖨 Шпора билета</button>`:''}</div>`
+        :'<div class="data-note">Темы нет в наших 56 билетах (материал 1 семестра / глава о комплексных числах)</div>'}
+      </div>
+    </div>`).join('')}`;
+  $('#enList').classList.add('hidden'); host.classList.remove('hidden');
+  host.onclick = ev => {
+    const b=ev.target.closest('[data-en]');
+    if(b){
+      if(b.dataset.en==='back'){ host.classList.add('hidden'); $('#enList').classList.remove('hidden'); renderEntryList(); }
+      else { enReveal=!enReveal; openVariant(id); }
+      C.haptic(); return;
+    }
+    const ch=ev.target.closest('[data-cheat]'); if(ch){ showCheatModal(+ch.dataset.cheat); return; }
+    const t=ev.target.closest('.en-toggle'); if(t){ t.closest('.en-item').classList.toggle('open'); C.haptic(); }
+  };
+  scrollViewTop(host);
+}
+function showCheatModal(n){
+  const t=ticketByN(n); if(!t) return;
+  const wrap=document.createElement('div'); wrap.className='modal cheat-modal';
+  wrap.innerHTML=`<div class="modal-panel">
+    <div class="modal-head"><h3>Шпора · билет ${n}</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="cheat-body"><div class="cheat-title">${e(stripNum(t.title))}</div>${cheatHtml(n)}</div>
+  </div>`;
+  document.body.appendChild(wrap);
+  wrap.onclick=ev=>{ if(ev.target===wrap||ev.target.closest('[data-close]')) wrap.remove(); };
+}
+
+/* =====================================================================
    ACCESS (вайтлист проверки ИИ)
    ===================================================================== */
 async function apiPost(path, payload){
@@ -732,6 +856,9 @@ const Study = window.Study = {
     try{ T=await fetch('data/theory.json').then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); }); }catch(err){ T=[]; console.error('theory.json', err); }
     T.sort((a,b)=>a.n-b.n);
     T.forEach(t=>t.cards.forEach(c=>{ cardById[c.id]={card:c, ticket:t}; }));
+    try{ (await fetch('data/cheat.json').then(r=>r.json())).forEach(c=>{ cheat[c.n]=c.lines; }); }catch(err){ console.error('cheat.json', err); }
+    try{ entry=await fetch('data/entry.json').then(r=>r.json()); }catch(err){ console.error('entry.json', err); }
+    indexEntry();
     LS.set('cardsTotal', String(Object.keys(cardById).length));
     await loadStudyProgress();
     await loadAccess();
@@ -740,12 +867,17 @@ const Study = window.Study = {
     $('#prSeg').onclick = ev => { const b=ev.target.closest('.seg-btn'); if(b){ setSeg(b.dataset.seg); C.haptic(); } };
     setSeg(LS.get('prSeg')==='write' ? 'write' : 'tests');
     $('#studyStats') && renderStudyStats();
-    document.addEventListener('click', ev => { const b=ev.target.closest('[data-access-request]'); if(b) requestAccessClick(b); });
+    document.addEventListener('click', ev => {
+      const b=ev.target.closest('[data-access-request]'); if(b) requestAccessClick(b);
+      const t=ev.target.closest('[data-theory-open]'); if(t){ C.switchView('theory'); openTicket(+t.dataset.theoryOpen); }
+    });
+    renderEntryList();
     $('#tixRun').addEventListener('click', ev => { const tl=ev.target.closest('[data-theory-link]'); if(tl && run){ C.switchView('theory'); openTicket(+tl.dataset.theoryLink); } });
     document.addEventListener('quiz:view', ev => {
       const v=ev.detail;
       if(v==='profile') renderStudyStats();
       if(v==='theory' && $('#thTicket').classList.contains('hidden')) renderTheoryList();
+      if(v==='entry' && $('#enVariant').classList.contains('hidden')) renderEntryList();
       if(v==='exam'){
         if(run){ showRunPane(); renderRun(); }
         else if(!$('#tixRun').classList.contains('hidden')){ /* открыт разбор — оставляем */ }

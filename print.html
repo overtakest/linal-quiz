@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Шпоры · Линейная алгебра, 2 семестр</title>
+<style>
+  :root{ --ink:#111; --mut:#555; --line:#bbb; --hi:#b03030; }
+  *{box-sizing:border-box}
+  body{margin:0;padding:18px;background:#f4f4f2;color:var(--ink);
+       font:11px/1.35 "Segoe UI",system-ui,sans-serif}
+  .bar{max-width:1100px;margin:0 auto 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+       background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+  .bar h1{font-size:15px;margin:0;flex:1}
+  .bar button,.bar a{font:inherit;font-weight:600;padding:7px 12px;border-radius:8px;border:1px solid var(--line);
+       background:#fff;color:var(--ink);cursor:pointer;text-decoration:none}
+  .bar button.main{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .bar label{display:flex;gap:5px;align-items:center;color:var(--mut)}
+  .sheet{max-width:1100px;margin:0 auto;background:#fff;border:1px solid var(--line);
+         padding:12px 14px;column-count:2;column-gap:14px;column-rule:1px solid #e3e3e3}
+  .t{break-inside:avoid;page-break-inside:avoid;margin:0 0 7px;padding-bottom:6px;border-bottom:1px dotted #d5d5d5}
+  .t h2{font-size:11px;margin:0 0 2px;line-height:1.25}
+  .t h2 b{display:inline-block;min-width:16px;color:var(--hi)}
+  .t .real{color:var(--hi);font-weight:700;font-size:9.5px;letter-spacing:.2px}
+  .t ul{margin:2px 0 0;padding-left:12px}
+  .t li{margin:1px 0;font-size:10px;line-height:1.3;overflow-wrap:anywhere}
+  .note{max-width:1100px;margin:10px auto 0;color:var(--mut);font-size:10px}
+  @media print{
+    @page{ size:A4 portrait; margin:8mm; }
+    body{background:#fff;padding:0;font-size:8.2px}
+    .bar,.note{display:none}
+    .sheet{max-width:none;border:0;padding:0;column-count:var(--cols,3);column-gap:6mm}
+    .t h2{font-size:8.4px} .t li{font-size:7.6px;line-height:1.25} .t{margin-bottom:4px}
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>Шпоры по линейной алгебре · 56 билетов</h1>
+  <label>колонок при печати:
+    <select id="cols"><option>2</option><option selected>3</option><option>4</option></select>
+  </label>
+  <label><input type="checkbox" id="onlyReal"> только темы с реального контроля</label>
+  <button class="main" onclick="print()">🖨 Печать / PDF</button>
+  <a href="index.html">← в приложение</a>
+</div>
+<div class="sheet" id="sheet">Загрузка…</div>
+<div class="note">Печать: масштаб «По размеру страницы», поля минимальные, фон не нужен. «Сохранить как PDF» — тот же диалог.</div>
+<script>
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let TICKETS = [], REAL = {};
+Promise.all([
+  fetch('data/theory.json').then(r=>r.json()),
+  fetch('data/cheat.json').then(r=>r.json()),
+  fetch('data/entry.json').then(r=>r.json()).catch(()=>({variants:[]})),
+]).then(([theory, cheat, entry]) => {
+  const byN = Object.fromEntries(cheat.map(c=>[c.n, c.lines]));
+  (entry.variants||[]).filter(v=>v.real).forEach(v=>{
+    (v.items||[]).forEach(it=>{ if(it.n) (REAL[it.n] = REAL[it.n] || []).push(v.title.replace(/\D+/g,'')); });
+  });
+  TICKETS = theory.map(t => ({ n:t.n, title:t.title.replace(/^\d+\.\s*/,''), lines: byN[t.n] || t.cards.map(c=>c.kind+': '+c.title) }));
+  render();
+});
+function render(){
+  const only = document.getElementById('onlyReal').checked;
+  const list = TICKETS.filter(t => !only || REAL[t.n]);
+  document.getElementById('sheet').innerHTML = list.map(t => `
+    <div class="t">
+      <h2><b>${t.n}.</b> ${esc(t.title)} ${REAL[t.n]?`<span class="real">🔥 входной контроль, вар. ${[...new Set(REAL[t.n])].join(', ')}</span>`:''}</h2>
+      <ul>${t.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul>
+    </div>`).join('') || '<i>ничего не выбрано</i>';
+}
+document.getElementById('onlyReal').onchange = render;
+document.getElementById('cols').onchange = e => document.documentElement.style.setProperty('--cols', e.target.value);
+document.documentElement.style.setProperty('--cols', '3');
+</script>
+</body>
+</html>

@@ -869,7 +869,7 @@ function download(name, text){
    NAVIGATION / TABS
    ===================================================================== */
 let currentView='theory';
-const VIEW_TITLE={theory:'Теория',all:'Отработка',exam:'Экзамен',profile:'Профиль'};
+const VIEW_TITLE={theory:'Теория',all:'Отработка',entry:'Входной контроль',exam:'Экзамен',profile:'Профиль'};
 function switchView(v){
   currentView=v;
   $$('.view').forEach(el=>el.classList.add('hidden'));
@@ -994,8 +994,8 @@ async function boot(){
   // deep-link на вкладку: ?tab=exam|profile|all  или  start_param
   let startTab = params.get('tab');
   const sp0 = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param;
-  if(sp0 && ['theory','all','exam','profile'].includes(sp0)) startTab = sp0;
-  switchView(['theory','all','exam','profile'].includes(startTab) ? startTab : 'theory');
+  if(sp0 && ['theory','all','entry','exam','profile'].includes(sp0)) startTab = sp0;
+  switchView(['theory','all','entry','exam','profile'].includes(startTab) ? startTab : 'theory');
   // hide splash
   const sp=$('#splash'); sp.classList.add('fade'); setTimeout(()=>sp.classList.add('hidden'),500);
   $('#app').classList.remove('hidden');

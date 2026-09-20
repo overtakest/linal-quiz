@@ -6,7 +6,7 @@
    exam:     параметры экзамена по билетам и шкала оценок.                  */
 window.QUIZ_CONFIG = {
   adminIds: [5185408627],   // твой Telegram ID — админка включается автоматически
-  version: "2.0",
+  version: "2.1",
   apiUrl: "https://linal-quiz-bot.linal-quiz-bot.workers.dev",
   exam: {
     tickets: 2,             // сколько билетов выпадает
