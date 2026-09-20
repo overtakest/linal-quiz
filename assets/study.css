@@ -195,3 +195,12 @@
 .usr-exams div{font-size:12.5px;color:var(--muted)}
 .usr-exams b{color:var(--text)}
 .usr-exams span{color:var(--faint)}
+
+/* ---- строка синхронизации в профиле ---- */
+.sync-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 6px;flex-wrap:wrap}
+.sync-state{font-size:13px;font-weight:700}
+.sync-state.s-ok{color:var(--success)}
+.sync-state.s-err{color:var(--danger)}
+.sync-state.s-dim{color:var(--muted)}
+.sync-err{color:var(--danger)}
+.sync-dbg{font-size:11.5px;color:var(--faint)}

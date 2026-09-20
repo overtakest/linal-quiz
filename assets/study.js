@@ -691,6 +691,12 @@ function renderStudyStats(){
       <div class="stat"><div class="stat-num">${last?last.g:'—'}</div><div class="stat-lbl">Последняя оценка</div></div>
       <div class="stat"><div class="stat-num">${avg}</div><div class="stat-lbl">Средняя оценка</div></div>
     </div>
+    <div class="sync-row">
+      <span class="sync-state s-${sync.state==='ок'?'ok':sync.state==='ошибка'?'err':'dim'}">🔄 Синхронизация: ${e(sync.state)}${sync.at?` · ${new Date(sync.at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`:''}</span>
+      <button class="btn ghost small" data-sync-now>Отправить сейчас</button>
+    </div>
+    ${sync.err?`<div class="data-note sync-err">${e(sync.err)}</div>`:''}
+    <div class="data-note sync-dbg">v${e((C.CFG.version)||'?')} · Telegram: ${C.TG?'да':'нет'} · initData: ${(C.TG&&C.TG.initData?C.TG.initData.length:0)} симв. · сервер: ${apiOn()?'задан':'нет'}</div>
     ${apiOn() && access ? `<div class="data-note">🔑 Проверка ИИ: ${access.admin?'вы админ — управление доступом в боте: /whitelist, /allow &lt;id&gt;, /revoke &lt;id&gt;':access.allowed?'доступ выдан':access.pending?'заявка на рассмотрении':'нет доступа'}</div>` : ''}`;
 }
 
@@ -852,6 +858,7 @@ function refreshAccessUi(){
    ПРОГРЕСС НА СЕРВЕР (чтобы админ видел участников)
    ===================================================================== */
 let lastSent = 0, sendT = null;
+let sync = { state:'—', at:0, err:'' };   // состояние отправки прогресса
 function snapshot(){
   const cardsTotal = Object.keys(cardById).length;
   const ws = Object.values(wrBest);
@@ -866,11 +873,15 @@ function snapshot(){
 }
 function isLearnedQ(q){ const m=/^q(\d+)$/.exec(q.id); return m ? C.App.learnedBase.has(+m[1]) : C.App.learnedCustom.has(q.id); }
 function pushProgress(force){
-  if(!apiOn() || !(C.TG && C.TG.initData)) return;          // только из Telegram
+  if(!apiOn()){ sync={state:'выключена', at:Date.now(), err:'не задан apiUrl'}; return; }
+  if(!(C.TG && C.TG.initData)){ sync={state:'нет Telegram', at:Date.now(), err:'приложение открыто не из бота (initData пуст)'}; return; }
   clearTimeout(sendT);
-  const go = () => {
+  const go = async () => {
     lastSent = Date.now();
-    apiPost('/api/progress', { snapshot: snapshot() }).catch(()=>{});
+    sync={state:'отправляю…', at:Date.now(), err:''};
+    try{ await apiPost('/api/progress', { snapshot: snapshot() }); sync={state:'ок', at:Date.now(), err:''}; }
+    catch(err){ sync={state:'ошибка', at:Date.now(), err:String(err.message||err)}; }
+    if(C.currentView==='profile') renderStudyStats();
   };
   if(force || Date.now()-lastSent > 120000) go();
   else sendT = setTimeout(go, 15000);
@@ -953,13 +964,15 @@ const Study = window.Study = {
     document.addEventListener('click', ev => {
       const b=ev.target.closest('[data-access-request]'); if(b) requestAccessClick(b);
       const t=ev.target.closest('[data-theory-open]'); if(t){ C.switchView('theory'); openTicket(+t.dataset.theoryOpen); }
+      const sy=ev.target.closest('[data-sync-now]');
+      if(sy){ lastSent=0; pushProgress(true); C.toast('Отправляю прогресс…'); setTimeout(renderStudyStats, 1200); }
     });
     renderEntryList();
     pushProgress(true);
     $('#tixRun').addEventListener('click', ev => { const tl=ev.target.closest('[data-theory-link]'); if(tl && run){ C.switchView('theory'); openTicket(+tl.dataset.theoryLink); } });
     document.addEventListener('quiz:view', ev => {
       const v=ev.detail;
-      if(v==='profile') renderStudyStats();
+      if(v==='profile'){ renderStudyStats(); pushProgress(); }
       if(v==='theory' && $('#thTicket').classList.contains('hidden')) renderTheoryList();
       if(v==='entry' && $('#enVariant').classList.contains('hidden')) renderEntryList();
       if(v==='exam'){
